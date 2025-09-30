@@ -1,0 +1,15 @@
+apiVersion: chaos-mesh.org/v1alpha1
+kind: PodChaos
+metadata:
+  name: pod-failure-example
+  namespace: default # Make sure this namespace exists
+spec:
+  action: pod-failure
+  mode: one # Kills one pod at a time
+  duration: '100s' # The experiment lasts for 30 seconds
+  selector:
+    namespaces:
+      - 'default' # The namespace of your target application
+    labelSelectors:
+      'app': 'adservice' # IMPORTANT: Change this to the label of your target pod(s)
+  gracePeriod: 0

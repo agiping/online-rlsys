@@ -1,0 +1,11 @@
+# DeepSeek API Key
+# Rename this file to config.py and fill in your API key
+DEEPSEEK_API_KEY = "YOUR_DEEPSEEK_API_KEY"
+
+# Agent Configuration
+AGENT_MODEL = "deepseek-coder"
+AGENT_MAX_TOKENS = 8000
+AGENT_TEMPERATURE = 0.7
+
+# Kubernetes Configuration
+KUBECONFIG_PATH = "~/.kube/config"
