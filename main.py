@@ -1,11 +1,12 @@
 import logging
 import uuid
 import os
+import time
 
 from online_rl_agent.agent.agent import DevOpsAgent
-from online_rl_agent.chaos.injector import apply_chaos_experiment
-from online_rl_agent.user_agent.simulator import get_user_task, get_reward_from_user
+from online_rl_agent.user_agent.simulator import get_reward_from_user
 from online_rl_agent.data.trajectory_store import TrajectoryStore
+from online_rl_agent.environment.k8s_chaos_env import KubernetesChaosEnvironment
 
 # Try to import config, but provide guidance if it's missing.
 try:
@@ -25,52 +26,58 @@ def main_loop():
     """
     The main loop for the online RL agent system.
     """
-    logger.info("Initializing DevOps Agent and Trajectory Store...")
+    logger.info("Initializing DevOps Agent, Environment, and Trajectory Store...")
     
     # Validate API key before starting
     if not hasattr(config, 'DEEPSEEK_API_KEY') or "YOUR_DEEPSEEK_API_KEY" in config.DEEPSEEK_API_KEY:
         logger.error("DeepSeek API key is not configured correctly in online_rl_agent/config.py")
         return
         
+    # --- Initialization ---
     agent = DevOpsAgent(api_key=config.DEEPSEEK_API_KEY, model="deepseek-coder")
     store = TrajectoryStore(save_path='data/trajectories.jsonl')
     
-    # Determine chaos template path
+    # The main loop now only interacts with the Environment abstraction
     chaos_template_path = os.path.join(os.path.dirname(__file__), 'online_rl_agent', 'chaos', 'templates', 'pod-failure.yaml')
+    env = KubernetesChaosEnvironment(chaos_yaml_path=chaos_template_path)
 
     while True:
         logger.info("--- Starting New Episode ---")
         
-        # 1. Inject fault
-        logger.info("Please manually inject a fault into the cluster.")
-        logger.info(f"You can use the example chaos experiment: kubectl apply -f {chaos_template_path}")
-        input("Press Enter after you have injected the fault and it has taken effect...")
-        # In a future version, this could be automated:
-        # apply_chaos_experiment(chaos_template_path)
+        try:
+            # 1. Setup environment
+            env.setup()
+            logger.info("Environment setup complete. Waiting for 15 seconds for fault to stabilize...")
+            time.sleep(15)
 
-        # 2. Get user task
-        user_task = get_user_task()
-        logger.info(f"Received user task: {user_task}")
+            # 2. Get user task from the environment
+            user_task = env.get_task()
+            logger.info(f"Received user task: {user_task}")
 
-        # 3. Start trajectory
-        trajectory_id = f"traj_{uuid.uuid4()}"
-        store.start_new_trajectory(trajectory_id)
+            # 3. Start trajectory
+            trajectory_id = f"traj_{uuid.uuid4()}"
+            store.start_new_trajectory(trajectory_id)
 
-        # 4. Run agent
-        logger.info("Running DevOps Agent to solve the problem...")
-        final_answer = agent.run(user_task, trajectory_store=store)
+            # 4. Run agent
+            logger.info("Running DevOps Agent to solve the problem...")
+            final_answer = agent.run(user_task, trajectory_store=store)
 
-        # 5. Get reward
-        reward = get_reward_from_user(final_answer)
-        logger.info(f"Received reward: {reward}")
+            # 5. Get reward
+            reward = get_reward_from_user(final_answer)
+            logger.info(f"Received reward: {reward}")
 
-        # 6. End and save trajectory
-        store.end_trajectory(reward)
-        store.save_trajectory()
-        
-        logger.info(f"Episode finished. Trajectory {trajectory_id} saved.")
+            # 6. End and save trajectory
+            store.end_trajectory(reward)
+            store.save_trajectory()
+            
+            logger.info(f"Episode finished. Trajectory {trajectory_id} saved.")
 
-        # 7. Ask to continue
+        finally:
+            # 7. Cleanup environment, ensuring it runs even if the agent fails
+            env.cleanup()
+            logger.info("Environment cleanup complete.")
+
+        # 8. Ask to continue
         continue_choice = input("Start another episode? (y/n): ").lower()
         if continue_choice != 'y':
             logger.info("Exiting.")
