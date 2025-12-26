@@ -19,13 +19,14 @@ except ImportError:
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 class DevOpsAgent:
-    def __init__(self, api_key: str = None, model: str = "deepseek-chat"):
+    def __init__(self, api_key: str = None, model: str = "deepseek-chat", kubeconfig: Optional[str] = None):
         """
         Initializes the DevOpsAgent.
 
         Args:
             api_key: The DeepSeek API key. If not provided, it will try to get it from config.
             model: The name of the model to use.
+            kubeconfig: Optional path to a kubeconfig file to restrict the agent's scope.
         """
         if api_key:
             self.api_key = api_key
@@ -38,6 +39,7 @@ class DevOpsAgent:
             raise ValueError("Please replace 'YOUR_DEEPSEEK_API_KEY' with your actual key in config.py.")
             
         self.model = model
+        self.kubeconfig = kubeconfig
         self.api_url = "https://api.deepseek.com/chat/completions"
         self.headers = {
             "Content-Type": "application/json",
@@ -45,11 +47,22 @@ class DevOpsAgent:
         }
         self.session = requests.Session()
         
-        self.available_tools = {
+        # Define available tools and wrap them with partial if kubeconfig is provided
+        from functools import partial
+        
+        base_tools = {
             "get_pods": k8s_tools.get_pods,
             "describe_pod": k8s_tools.describe_pod,
             "get_pod_logs": k8s_tools.get_pod_logs,
         }
+        
+        self.available_tools = {}
+        for name, func in base_tools.items():
+            if self.kubeconfig:
+                self.available_tools[name] = partial(func, kubeconfig=self.kubeconfig)
+            else:
+                self.available_tools[name] = func
+                
         self.conversation_history = []
 
     def _call_llm(self, messages: list) -> Dict[str, Any]:

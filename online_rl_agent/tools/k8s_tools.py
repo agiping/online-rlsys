@@ -4,12 +4,13 @@ import logging
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-def _run_kubectl_command(command: list[str]) -> str:
+def _run_kubectl_command(command: list[str], kubeconfig: str = None) -> str:
     """
     A helper function to run a kubectl command and return the output.
     
     Args:
         command: A list of strings representing the command to run.
+        kubeconfig: Optional path to a kubeconfig file.
         
     Returns:
         The stdout of the command as a string.
@@ -18,6 +19,9 @@ def _run_kubectl_command(command: list[str]) -> str:
         subprocess.CalledProcessError: If the command returns a non-zero exit code.
     """
     try:
+        if kubeconfig:
+            command = command[:1] + ["--kubeconfig", kubeconfig] + command[1:]
+            
         logging.info(f"Running command: {' '.join(command)}")
         result = subprocess.run(command, capture_output=True, text=True, check=True)
         return result.stdout
@@ -28,26 +32,28 @@ def _run_kubectl_command(command: list[str]) -> str:
         logging.error(f"Command failed with exit code {e.returncode}: {e.stderr}")
         return e.stderr
 
-def get_pods(namespace: str = "default") -> str:
+def get_pods(namespace: str = "default", kubeconfig: str = None) -> str:
     """
     Gets the list of pods in a specified namespace.
     
     Args:
         namespace: The Kubernetes namespace to query.
+        kubeconfig: Optional path to a kubeconfig file.
         
     Returns:
         A string containing the kubectl output for getting pods.
     """
     command = ["kubectl", "get", "pods", "-n", namespace]
-    return _run_kubectl_command(command)
+    return _run_kubectl_command(command, kubeconfig)
 
-def describe_pod(pod_name: str, namespace: str = "default") -> str:
+def describe_pod(pod_name: str, namespace: str = "default", kubeconfig: str = None) -> str:
     """
     Describes a specific pod in a specified namespace.
     
     Args:
         pod_name: The name of the pod to describe.
         namespace: The Kubernetes namespace where the pod resides.
+        kubeconfig: Optional path to a kubeconfig file.
         
     Returns:
         A string containing the kubectl output for describing the pod.
@@ -55,9 +61,9 @@ def describe_pod(pod_name: str, namespace: str = "default") -> str:
     if not pod_name:
         return "Error: pod_name cannot be empty."
     command = ["kubectl", "describe", "pod", pod_name, "-n", namespace]
-    return _run_kubectl_command(command)
+    return _run_kubectl_command(command, kubeconfig)
 
-def get_pod_logs(pod_name: str, namespace: str = "default", tail: int = 50) -> str:
+def get_pod_logs(pod_name: str, namespace: str = "default", tail: int = 50, kubeconfig: str = None) -> str:
     """
     Gets the logs of a specific pod in a specified namespace.
     
@@ -65,6 +71,7 @@ def get_pod_logs(pod_name: str, namespace: str = "default", tail: int = 50) -> s
         pod_name: The name of the pod to get logs from.
         namespace: The Kubernetes namespace where the pod resides.
         tail: The number of recent lines to display.
+        kubeconfig: Optional path to a kubeconfig file.
         
     Returns:
         A string containing the kubectl output for the pod's logs.
@@ -72,7 +79,7 @@ def get_pod_logs(pod_name: str, namespace: str = "default", tail: int = 50) -> s
     if not pod_name:
         return "Error: pod_name cannot be empty."
     command = ["kubectl", "logs", pod_name, "-n", namespace, f"--tail={tail}"]
-    return _run_kubectl_command(command)
+    return _run_kubectl_command(command, kubeconfig)
 
 if __name__ == '__main__':
     # Example usage for manual testing
